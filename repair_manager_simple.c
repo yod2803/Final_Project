@@ -24,11 +24,9 @@ static void trim_newline(char *s) {
 }
 static void trim_spaces(char *s) {
     if (!s) return;
-    // leading
     size_t i = 0, n = strlen(s);
     while (i < n && isspace((unsigned char)s[i])) i++;
     if (i) memmove(s, s + i, n - i + 1);
-    // trailing
     n = strlen(s);
     while (n > 0 && isspace((unsigned char)s[n - 1])) s[--n] = 0;
 }
@@ -56,23 +54,71 @@ static int icontains(const char *hay, const char *needle) {
     return 0;
 }
 
+/* ---------- Date validation ---------- */
+static int is_leap_year(int y) {
+    return (y % 400 == 0) || ((y % 4 == 0) && (y % 100 != 0));
+}
+static int max_days_in_month(int y, int m) {
+    switch (m) {
+        case 1: case 3: case 5: case 7: case 8: case 10: case 12: return 31;
+        case 4: case 6: case 9: case 11: return 30;
+        case 2: return is_leap_year(y) ? 29 : 28;
+        default: return 0;
+    }
+}
+static int validate_and_normalize_date(const char *in, char *buff, size_t buffsz) {
+    if (!in || !buff || buffsz < 11) return 0;
+    int y, m, d;
+    char tmp[64];
+    strncpy(tmp, in, sizeof(tmp)-1);
+    tmp[sizeof(tmp)-1] = 0;
+    trim_spaces(tmp);
+
+    if (sscanf(tmp, "%d-%d-%d", &y, &m, &d) != 3) return 0;
+
+    if (m < 1 || m > 12) return 0;
+    if (d < 1) return 0;
+
+    int mdays = max_days_in_month(y, m);
+    if (mdays == 0) return 0;
+    if (d > mdays) return 0;
+
+    if (strchr(tmp, ',')) return 0;
+
+    snprintf(buff, buffsz, "%04d-%02d-%02d", y, m, d);
+    return 1;
+}
+static void prompt_valid_date(const char *label, char *out, size_t outsz) {
+    char line[MAX];
+    for (;;) {
+        printf("%s (YYYY-MM-DD): ", label);
+        if (!fgets(line, sizeof(line), stdin)) {
+            out[0] = 0;
+            return;
+        }
+        trim_newline(line);
+        trim_spaces(line);
+        if (validate_and_normalize_date(line, out, outsz)) {
+            return;
+        }
+        printf("รูปแบบไม่ถูกต้อง หรือวันเกินจำนวนวันในเดือนนั้น ๆ\n");
+    }
+}
+
 /* ---------- CSV helpers ---------- */
 static int ensure_header_exists(void) {
     FILE *fp = fopen(CSV_FILE, "r");
     if (!fp) {
-        // create with header
         fp = fopen(CSV_FILE, "w");
         if (!fp) return 0;
         fprintf(fp, "ownername,address,RepairDetails,RepairStartDate\n");
         fclose(fp);
         return 1;
     } else {
-        // check first line
         char first[1024];
         if (!fgets(first, sizeof(first), fp)) { fclose(fp); return 1; }
         fclose(fp);
         if (strncmp(first, "ownername,address,RepairDetails,RepairStartDate", 47) != 0) {
-            // prepend header by rewriting (ง่ายสุด: ถ้าไม่มี header ให้สร้างใหม่ + คัดลอกเดิม)
             FILE *in = fopen(CSV_FILE, "r");
             FILE *out = fopen("tmp.csv", "w");
             if (!in || !out) { if(in) fclose(in); if(out) fclose(out); return 0; }
@@ -87,7 +133,6 @@ static int ensure_header_exists(void) {
 }
 
 static int parse_line(char *line, Repair *r) {
-    // คาดหวัง CSV แบบง่าย ไม่มีเครื่องหมายคำพูดครอบ
     char *p = line;
     char *tok = strtok(p, ",");
     if (!tok) return 0; strncpy(r->owner, tok, MAX - 1); r->owner[MAX - 1] = 0; trim_spaces(r->owner);
@@ -134,7 +179,8 @@ static void add_record(void) {
     printf("ชื่อเจ้าของ: "); if (!fgets(r.owner, MAX, stdin)) return; trim_newline(r.owner); trim_spaces(r.owner);
     printf("ที่อยู่: "); if (!fgets(r.address, MAX, stdin)) return; trim_newline(r.address); trim_spaces(r.address);
     printf("รายละเอียดซ่อม: "); if (!fgets(r.details, MAX, stdin)) return; trim_newline(r.details); trim_spaces(r.details);
-    printf("วันที่เริ่ม (YYYY-MM-DD): "); if (!fgets(r.date, MAX, stdin)) return; trim_newline(r.date); trim_spaces(r.date);
+
+    prompt_valid_date("วันที่เริ่ม", r.date, sizeof(r.date));
 
     if (has_comma(r.owner) || has_comma(r.address) || has_comma(r.details) || has_comma(r.date)) {
         printf("เพิ่มไม่สำเร็จ: ห้ามมีเครื่องหมายจุลภาค (,) ในข้อมูล\n");
@@ -186,11 +232,9 @@ static void update_date_by_owner(void) {
     printf("ชื่อเจ้าของที่จะอัปเดต (เทียบแบบไม่สนตัวพิมพ์): ");
     if (!fgets(owner, MAX, stdin)) { fclose(fp); fclose(tmp); return; }
     trim_newline(owner); trim_spaces(owner);
-    printf("วันที่ใหม่ (YYYY-MM-DD): ");
-    if (!fgets(newDate, MAX, stdin)) { fclose(fp); fclose(tmp); return; }
-    trim_newline(newDate); trim_spaces(newDate);
 
-    // คัดลอก header ก่อน
+    prompt_valid_date("วันที่ใหม่", newDate, sizeof(newDate));
+
     fprintf(tmp, "ownername,address,RepairDetails,RepairStartDate\n");
 
     char line[1024];
@@ -228,16 +272,13 @@ static void delete_by_owner(void) {
     printf("ยืนยันลบทั้งหมดของ \"%s\" ? (y/n): ", owner);
     int ch = getchar();
     if (ch != 'y' && ch != 'Y') {
-        // flush line
         while (ch != '\n' && ch != EOF) ch = getchar();
         fclose(fp); fclose(tmp); remove("tmp.csv");
         printf("ยกเลิกการลบ\n");
         return;
     }
-    // flush newline
     while (ch != '\n' && ch != EOF) ch = getchar();
 
-    // เขียน header
     fprintf(tmp, "ownername,address,RepairDetails,RepairStartDate\n");
 
     char line[1024];
@@ -280,48 +321,44 @@ int main(void) {
     ensure_header_exists();
 
     char buf[16];
-while (1) {
-    menu();
-    if (!fgets(buf, sizeof(buf), stdin)) break;
-    trim_newline(buf); 
-    trim_spaces(buf);
+    while (1) {
+        menu();
+        if (!fgets(buf, sizeof(buf), stdin)) break;
+        trim_newline(buf);
+        trim_spaces(buf);
 
-    // ถ้าว่าง ให้แจ้งเตือน
-    if (strlen(buf) == 0) {
-        printf("กรุณาป้อนตัวเลข 0-5\n");
-        continue;
-    }
+        if (strlen(buf) == 0) {
+            printf("กรุณาป้อนตัวเลข 0-5\n");
+            continue;
+        }
+        int validNumber = 1;
+        for (size_t i = 0; i < strlen(buf); i++) {
+            if (!isdigit((unsigned char)buf[i])) { 
+                validNumber = 0; 
+                break; 
+            }
+        }
+        if (!validNumber) {
+            printf("ตัวเลือกไม่ถูกต้อง ต้องเป็นตัวเลข 0-5 เท่านั้น\n");
+            continue;
+        }
 
-    // ตรวจสอบว่ามีแต่ตัวเลข
-    int validNumber = 1;
-    for (size_t i = 0; i < strlen(buf); i++) {
-        if (!isdigit((unsigned char)buf[i])) { 
-            validNumber = 0; 
+        int c = atoi(buf);
+
+        if      (c == 1) show_all();
+        else if (c == 2) add_record();
+        else if (c == 3) search_records();
+        else if (c == 4) update_date_by_owner();
+        else if (c == 5) delete_by_owner();
+        else if (c == 0) { 
+            printf("ออกโปรแกรม\n"); 
             break; 
         }
+        else {
+            printf("ตัวเลือกไม่ถูกต้อง ต้องเป็น 0-5\n");
+        }
     }
-
-    if (!validNumber) {
-        printf("ตัวเลือกไม่ถูกต้อง ต้องเป็นตัวเลข 0-5 เท่านั้น\n");
-        continue;
-    }
-
-    int c = atoi(buf);
-
-    if      (c == 1) show_all();
-    else if (c == 2) add_record();
-    else if (c == 3) search_records();
-    else if (c == 4) update_date_by_owner();
-    else if (c == 5) delete_by_owner();
-    else if (c == 0) { 
-        printf("ออกโปรแกรม\n"); 
-        break; 
-    }
-    else {
-        printf("ตัวเลือกไม่ถูกต้อง ต้องเป็น 0-5\n");
-    }
-}
-
-
     return 0;
 }
+
+
