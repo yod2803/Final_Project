@@ -73,13 +73,13 @@ repair.exe
 ### Unit Test
 
 ```bash
-./unit_test.exe
+กรณี power shell ./unit_test.exe กรณี cmd unit_test.exe
 ```
 
 ### E2E Test
 
 ```bash
-./e2e_test.exe
+กรณี power shell ./e2e_test.exe กรณี cmd e2e_test.exe
 ```
 
 ---
