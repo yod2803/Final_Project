@@ -327,6 +327,151 @@ void delete_record(void) {
     }
 }
 
+void edit_record(void) {
+    char key[MAX];
+    printf("ป้อนชื่อเจ้าของที่ต้องการแก้ไข: "); fflush(stdout);
+    
+    if (!read_utf8_line(key, MAX)) return;
+    trim_spaces(key);
+    
+    if (strlen(key) == 0) {
+        printf("❌ กรุณาป้อนชื่อเจ้าของ\n");
+        return;
+    }
+    
+    FILE *fp = fopen(CSV_FILE, "r");
+    if (!fp) { printf("ไม่พบไฟล์ %s\n", CSV_FILE); return; }
+    
+    // หาข้อมูลที่ต้องการแก้ไข
+    char line[1024];
+    int lineNo = 0, found = 0;
+    Repair foundRecord;
+    
+    while (fgets(line, sizeof(line), fp)) {
+        if (lineNo == 0) { lineNo++; continue; }
+        
+        Repair r;
+        char lineCopy[1024];
+        strcpy(lineCopy, line);
+        
+        if (parse_line(lineCopy, &r)) {
+            if (utf8_icontains(r.owner, key)) {
+                foundRecord = r;
+                found = 1;
+                break;
+            }
+        }
+        lineNo++;
+    }
+    fclose(fp);
+    
+    if (!found) {
+        printf("❌ ไม่พบข้อมูลที่ตรงกับ '%s'\n", key);
+        return;
+    }
+    
+    // แสดงข้อมูลปัจจุบัน
+    printf("\n📋 ข้อมูลปัจจุบัน:\n");
+    print_table_header();
+    print_record(&foundRecord);
+    
+    // รับข้อมูลใหม่
+    Repair newRecord;
+    char choice[10];
+    
+    printf("\nแก้ไขชื่อเจ้าของ? (y/n): "); fflush(stdout);
+    read_utf8_line(choice, sizeof(choice));
+    if (choice[0] == 'y' || choice[0] == 'Y') {
+        printf("ชื่อเจ้าของใหม่ [%s]: ", foundRecord.owner); fflush(stdout);
+        if (read_utf8_line(newRecord.owner, MAX) && strlen(newRecord.owner) > 0) {
+            trim_spaces(newRecord.owner);
+        } else {
+            strcpy(newRecord.owner, foundRecord.owner);
+        }
+    } else {
+        strcpy(newRecord.owner, foundRecord.owner);
+    }
+    
+    printf("แก้ไขที่อยู่? (y/n): "); fflush(stdout);
+    read_utf8_line(choice, sizeof(choice));
+    if (choice[0] == 'y' || choice[0] == 'Y') {
+        printf("ที่อยู่ใหม่ [%s]: ", foundRecord.address); fflush(stdout);
+        if (read_utf8_line(newRecord.address, MAX) && strlen(newRecord.address) > 0) {
+            trim_spaces(newRecord.address);
+        } else {
+            strcpy(newRecord.address, foundRecord.address);
+        }
+    } else {
+        strcpy(newRecord.address, foundRecord.address);
+    }
+    
+    printf("แก้ไขรายละเอียดซ่อม? (y/n): "); fflush(stdout);
+    read_utf8_line(choice, sizeof(choice));
+    if (choice[0] == 'y' || choice[0] == 'Y') {
+        printf("รายละเอียดซ่อมใหม่ [%s]: ", foundRecord.details); fflush(stdout);
+        if (read_utf8_line(newRecord.details, MAX) && strlen(newRecord.details) > 0) {
+            trim_spaces(newRecord.details);
+        } else {
+            strcpy(newRecord.details, foundRecord.details);
+        }
+    } else {
+        strcpy(newRecord.details, foundRecord.details);
+    }
+    
+    printf("แก้ไขวันที่? (y/n): "); fflush(stdout);
+    read_utf8_line(choice, sizeof(choice));
+    if (choice[0] == 'y' || choice[0] == 'Y') {
+        printf("วันที่ใหม่ [%s] ", foundRecord.date);
+        prompt_valid_date("", newRecord.date, sizeof(newRecord.date));
+    } else {
+        strcpy(newRecord.date, foundRecord.date);
+    }
+    
+    // ตรวจสอบ comma
+    if (has_comma(newRecord.owner) || has_comma(newRecord.address) || 
+        has_comma(newRecord.details) || has_comma(newRecord.date)) {
+        printf("❌ ห้ามใช้เครื่องหมายจุลภาค (,)\n");
+        return;
+    }
+    
+    // เขียนข้อมูลกลับไปยังไฟล์
+    fp = fopen(CSV_FILE, "r");
+    FILE *tmp = fopen("tmp.csv", "w");
+    if (!tmp) {
+        printf("❌ ไม่สามารถสร้างไฟล์ชั่วคราวได้\n");
+        fclose(fp);
+        return;
+    }
+    
+    fprintf(tmp, "ownername,address,RepairDetails,RepairStartDate\n");
+    lineNo = 0;
+    
+    while (fgets(line, sizeof(line), fp)) {
+        if (lineNo == 0) { lineNo++; continue; }
+        
+        Repair r;
+        char lineCopy[1024];
+        strcpy(lineCopy, line);
+        
+        if (parse_line(lineCopy, &r)) {
+            if (utf8_icontains(r.owner, key)) {
+                fprintf(tmp, "%s,%s,%s,%s\n", newRecord.owner, newRecord.address, 
+                        newRecord.details, newRecord.date);
+            } else {
+                fprintf(tmp, "%s,%s,%s,%s\n", r.owner, r.address, r.details, r.date);
+            }
+        }
+        lineNo++;
+    }
+    
+    fclose(fp);
+    fclose(tmp);
+    
+    remove(CSV_FILE);
+    rename("tmp.csv", CSV_FILE);
+    printf("✅ แก้ไขข้อมูลเรียบร้อยแล้ว!\n");
+}
+
 #ifdef BUILD_MAIN
 int main(void) {
 #ifdef _WIN32
@@ -337,14 +482,23 @@ int main(void) {
     char buf[16];
     while (1) {
         printf("\n=== 🏠 Home Repair Manager ===\n");
-        printf("1. แสดงข้อมูลทั้งหมด\n2. เพิ่มข้อมูลใหม่\n3. ค้นหา (ชื่อ/ที่อยู่)\n4. ลบข้อมูล\n0. ออกโปรแกรม\nเลือก: "); fflush(stdout);
+        printf("1. แสดงข้อมูลทั้งหมด\n");
+        printf("2. เพิ่มข้อมูลใหม่\n");
+        printf("3. ค้นหา (ชื่อ/ที่อยู่)\n");
+        printf("4. ลบข้อมูล\n");
+        printf("5. แก้ไขข้อมูล\n");
+        printf("0. ออกโปรแกรม\n");
+        printf("เลือก: "); fflush(stdout);
+        
         if (!read_utf8_line(buf, sizeof(buf))) break;
         trim_spaces(buf);
         int c = atoi(buf);
+        
         if (c == 1) show_all();
         else if (c == 2) add_record();
         else if (c == 3) search_records();
         else if (c == 4) delete_record();
+        else if (c == 5) edit_record();
         else if (c == 0) { printf("👋 ออกจากโปรแกรมแล้ว\n"); break; }
         else printf("❌ ตัวเลือกไม่ถูกต้อง\n");
     }
