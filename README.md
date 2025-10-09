@@ -20,13 +20,13 @@ HomeRepairManager/
 ## ⚙️ การคอมไพล์ (How to Compile)
 
 ```bash
-gcc main.c -o repair_manager.exe
+gcc repair_manager_simple.c Unittest.c E2Etest.c -o main
 ```
 
 จากนั้นรันโปรแกรมได้ด้วย:
 
 ```bash
-./repair_manager.exe
+.\main.exe
 ```
 
 > 💡 **หมายเหตุ:** บน Windows ระบบจะตั้งค่าให้คอนโซลรองรับภาษา UTF-8 อัตโนมัติ
