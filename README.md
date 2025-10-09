@@ -18,7 +18,7 @@
 ## 🔗 ลิงก์ที่เกี่ยวข้อง
 
 * **GitHub:** [https://github.com/yod2803/Final_Project](https://github.com/yod2803/Final_Project)
-* **License:** MIT
+
 
 ---
 
