@@ -95,13 +95,6 @@ Final_Project/
 └── README.md         # เอกสารโปรเจกต์
 ```
 
----
-
-## 📖 License
-
-โครงการนี้เผยแพร่ภายใต้สัญญาอนุญาต **MIT License**.
-
----
 
 <div align="center">
 
