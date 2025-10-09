@@ -190,20 +190,43 @@ void add_record(void) {
     fclose(fp);
     printf("เพิ่มข้อมูลแล้ว\n");
 }
-
 void search_records(void) {
     FILE *fp = fopen(CSV_FILE, "r");
-    if (!fp) { printf("ไม่พบไฟล์ %s\n", CSV_FILE); return; }
+    if (!fp) { 
+        printf("ไม่พบไฟล์ %s\n", CSV_FILE); 
+        return; 
+    }
 
     char key[MAX];
     printf("ค้นหาคำ (ชื่อเจ้าของ หรือ ที่อยู่): ");
-    if (!fgets(key, MAX, stdin)) { fclose(fp); return; }
-    trim_newline(key); trim_spaces(key);
+    if (!fgets(key, MAX, stdin)) { 
+        fclose(fp); 
+        return; 
+    }
+    trim_newline(key);
+    trim_spaces(key);
+
+    // ✅ ตรวจหาช่องว่าง
+    if (strchr(key, ' ') != NULL) {
+        printf("❌ ห้ามมีช่องว่างในคำค้นหา\n");
+        fclose(fp);
+        return;
+    }
+
+    // ✅ ตรวจความยาวอย่างน้อย 2 ตัว
+    if (strlen(key) < 2) {
+        printf("❌ ต้องพิมพ์อย่างน้อย 2 ตัวอักษร\n");
+        fclose(fp);
+        return;
+    }
 
     char line[1024];
     int lineNo = 0, found = 0;
     while (fgets(line, sizeof(line), fp)) {
-        if (lineNo == 0 && strncmp(line, "ownername,", 10) == 0) { lineNo++; continue; }
+        if (lineNo == 0 && strncmp(line, "ownername,", 10) == 0) { 
+            lineNo++; 
+            continue; 
+        }
         Repair r;
         if (parse_line(line, &r)) {
             if (icontains(r.owner, key) || icontains(r.address, key)) {
@@ -214,9 +237,13 @@ void search_records(void) {
         lineNo++;
     }
     fclose(fp);
-    if (!found) printf("ไม่พบข้อมูลที่ตรงกับ \"%s\"\n", key);
-    else printf("พบทั้งหมด %d รายการ\n", found);
+
+    if (!found) 
+        printf("ไม่พบข้อมูลที่ตรงกับ \"%s\"\n", key);
+    else 
+        printf("พบทั้งหมด %d รายการ\n", found);
 }
+
 
 void update_date_by_owner(void) {
     FILE *fp = fopen(CSV_FILE, "r");
