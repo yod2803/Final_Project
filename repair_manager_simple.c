@@ -2,27 +2,19 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include "repair_manager.h"
 
 #ifdef _WIN32
 #include <windows.h>
 #endif
 
-#define CSV_FILE "repairs.csv"
-#define MAX 256
-
-typedef struct {
-    char owner[MAX];
-    char address[MAX];
-    char details[MAX];
-    char date[MAX];
-} Repair;
-
 /* ---------- Utilities ---------- */
-static void trim_newline(char *s) {
+void trim_newline(char *s) {
     if (!s) return;
     s[strcspn(s, "\r\n")] = 0;
 }
-static void trim_spaces(char *s) {
+
+void trim_spaces(char *s) {
     if (!s) return;
     size_t i = 0, n = strlen(s);
     while (i < n && isspace((unsigned char)s[i])) i++;
@@ -30,10 +22,12 @@ static void trim_spaces(char *s) {
     n = strlen(s);
     while (n > 0 && isspace((unsigned char)s[n - 1])) s[--n] = 0;
 }
-static int has_comma(const char *s) {
+
+int has_comma(const char *s) {
     return s && strchr(s, ',') != NULL;
 }
-static int iequals(const char *a, const char *b) {
+
+int iequals(const char *a, const char *b) {
     if (!a || !b) return 0;
     size_t la = strlen(a), lb = strlen(b);
     if (la != lb) return 0;
@@ -41,7 +35,8 @@ static int iequals(const char *a, const char *b) {
         if (tolower((unsigned char)a[i]) != tolower((unsigned char)b[i])) return 0;
     return 1;
 }
-static int icontains(const char *hay, const char *needle) {
+
+int icontains(const char *hay, const char *needle) {
     if (!hay || !needle) return 0;
     size_t hlen = strlen(hay), nlen = strlen(needle);
     if (nlen == 0) return 1;
@@ -55,10 +50,11 @@ static int icontains(const char *hay, const char *needle) {
 }
 
 /* ---------- Date validation ---------- */
-static int is_leap_year(int y) {
+int is_leap_year(int y) {
     return (y % 400 == 0) || ((y % 4 == 0) && (y % 100 != 0));
 }
-static int max_days_in_month(int y, int m) {
+
+int max_days_in_month(int y, int m) {
     switch (m) {
         case 1: case 3: case 5: case 7: case 8: case 10: case 12: return 31;
         case 4: case 6: case 9: case 11: return 30;
@@ -66,7 +62,8 @@ static int max_days_in_month(int y, int m) {
         default: return 0;
     }
 }
-static int validate_and_normalize_date(const char *in, char *buff, size_t buffsz) {
+
+int validate_and_normalize_date(const char *in, char *buff, size_t buffsz) {
     if (!in || !buff || buffsz < 11) return 0;
     int y, m, d;
     char tmp[64];
@@ -75,20 +72,19 @@ static int validate_and_normalize_date(const char *in, char *buff, size_t buffsz
     trim_spaces(tmp);
 
     if (sscanf(tmp, "%d-%d-%d", &y, &m, &d) != 3) return 0;
-
     if (m < 1 || m > 12) return 0;
     if (d < 1) return 0;
 
     int mdays = max_days_in_month(y, m);
     if (mdays == 0) return 0;
     if (d > mdays) return 0;
-
     if (strchr(tmp, ',')) return 0;
 
     snprintf(buff, buffsz, "%04d-%02d-%02d", y, m, d);
     return 1;
 }
-static void prompt_valid_date(const char *label, char *out, size_t outsz) {
+
+void prompt_valid_date(const char *label, char *out, size_t outsz) {
     char line[MAX];
     for (;;) {
         printf("%s (YYYY-MM-DD): ", label);
@@ -106,7 +102,7 @@ static void prompt_valid_date(const char *label, char *out, size_t outsz) {
 }
 
 /* ---------- CSV helpers ---------- */
-static int ensure_header_exists(void) {
+int ensure_header_exists(void) {
     FILE *fp = fopen(CSV_FILE, "r");
     if (!fp) {
         fp = fopen(CSV_FILE, "w");
@@ -132,7 +128,7 @@ static int ensure_header_exists(void) {
     }
 }
 
-static int parse_line(char *line, Repair *r) {
+int parse_line(char *line, Repair *r) {
     char *p = line;
     char *tok = strtok(p, ",");
     if (!tok) return 0; strncpy(r->owner, tok, MAX - 1); r->owner[MAX - 1] = 0; trim_spaces(r->owner);
@@ -149,12 +145,12 @@ static int parse_line(char *line, Repair *r) {
     return 1;
 }
 
-static void print_record(const Repair *r) {
+void print_record(const Repair *r) {
     printf("%s | %s | %s | %s\n", r->owner, r->address, r->details, r->date);
 }
 
 /* ---------- Features ---------- */
-static void show_all(void) {
+void show_all(void) {
     FILE *fp = fopen(CSV_FILE, "r");
     if (!fp) { printf("ไม่พบไฟล์ %s\n", CSV_FILE); return; }
     char line[1024];
@@ -172,7 +168,7 @@ static void show_all(void) {
     if (shown == 0) printf("ไม่มีข้อมูลให้แสดง\n");
 }
 
-static void add_record(void) {
+void add_record(void) {
     if (!ensure_header_exists()) { printf("สร้าง/ตรวจสอบไฟล์ไม่สำเร็จ\n"); return; }
 
     Repair r;
@@ -195,7 +191,7 @@ static void add_record(void) {
     printf("เพิ่มข้อมูลแล้ว\n");
 }
 
-static void search_records(void) {
+void search_records(void) {
     FILE *fp = fopen(CSV_FILE, "r");
     if (!fp) { printf("ไม่พบไฟล์ %s\n", CSV_FILE); return; }
 
@@ -222,7 +218,7 @@ static void search_records(void) {
     else printf("พบทั้งหมด %d รายการ\n", found);
 }
 
-static void update_date_by_owner(void) {
+void update_date_by_owner(void) {
     FILE *fp = fopen(CSV_FILE, "r");
     if (!fp) { printf("ไม่พบไฟล์ %s\n", CSV_FILE); return; }
     FILE *tmp = fopen("tmp.csv", "w");
@@ -258,7 +254,7 @@ static void update_date_by_owner(void) {
     else printf("อัปเดตแล้ว %d รายการ\n", changed);
 }
 
-static void delete_by_owner(void) {
+void delete_by_owner(void) {
     FILE *fp = fopen(CSV_FILE, "r");
     if (!fp) { printf("ไม่พบไฟล์ %s\n", CSV_FILE); return; }
     FILE *tmp = fopen("tmp.csv", "w");
@@ -309,6 +305,8 @@ static void menu(void) {
     printf("3. ค้นหา (ชื่อ/ที่อยู่)\n");
     printf("4. อัปเดตวันที่เริ่ม (ตามชื่อ)\n");
     printf("5. ลบข้อมูลตามชื่อ\n");
+    printf("6. Units Test\n");
+    printf("7. E2E Test\n");
     printf("0. ออก\n");
     printf("เลือก: ");
 }
@@ -350,6 +348,8 @@ int main(void) {
         else if (c == 3) search_records();
         else if (c == 4) update_date_by_owner();
         else if (c == 5) delete_by_owner();
+        else if (c == 6) Run_units();
+        else if (c == 7) Run_E2E();
         else if (c == 0) { 
             printf("ออกโปรแกรม\n"); 
             break; 
@@ -360,5 +360,3 @@ int main(void) {
     }
     return 0;
 }
-
-
